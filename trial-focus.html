@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Single Trial Screening — MIMIC-IV Demo Patients</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Arial,sans-serif;background:#f0fdf4;color:#1a202c;min-height:100vh}
+
+header{background:linear-gradient(135deg,#065f46,#059669);padding:22px 28px;color:#fff}
+header h1{font-size:1.4rem;font-weight:800;display:flex;align-items:center;gap:10px}
+header p{color:#a7f3d0;font-size:0.82rem;margin-top:5px}
+header a{color:#a7f3d0;text-decoration:underline}
+
+.toolbar{background:#fff;border-bottom:2px solid #d1fae5;padding:14px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.toolbar select{border:1px solid #d1d5db;border-radius:8px;padding:8px 14px;font-size:0.82rem;outline:none;max-width:600px;flex:1}
+.toolbar select:focus{border-color:#059669}
+.toolbar label{font-size:0.78rem;font-weight:700;color:#374151}
+.btn{border:none;border-radius:8px;padding:8px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;transition:all .15s}
+.btn-green{background:#059669;color:#fff}.btn-green:hover{background:#047857}
+.btn-outline{background:#fff;color:#059669;border:1.5px solid #059669}.btn-outline:hover{background:#ecfdf5}
+.badge-count{background:#d1fae5;color:#065f46;border-radius:20px;padding:4px 12px;font-size:0.78rem;font-weight:700}
+
+.page{max-width:1300px;margin:0 auto;padding:20px 16px}
+
+.loading{text-align:center;padding:60px;color:#6b7280}
+.spinner{width:40px;height:40px;border:4px solid #d1fae5;border-top-color:#059669;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Trial info panel ── */
+.trial-panel{background:#fff;border:1px solid #d1fae5;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 10px rgba(5,150,105,.06)}
+.tp-nct{background:#065f46;color:#fff;border-radius:8px;padding:5px 12px;font-size:0.75rem;font-weight:800;display:inline-block;margin-bottom:8px}
+.tp-title{font-weight:800;font-size:1.15rem;color:#1a202c;line-height:1.4;margin-bottom:10px}
+.tp-meta{display:flex;gap:20px;flex-wrap:wrap;font-size:0.8rem;color:#6b7280;margin-bottom:14px}
+.tp-meta b{color:#374151}
+.tp-summary{font-size:0.82rem;color:#4b5563;line-height:1.6;margin-bottom:14px;padding:12px;background:#f9fafb;border-radius:10px}
+
+/* ── Criteria panel ── */
+.criteria-panel{background:#fff;border:1px solid #d1fae5;border-radius:16px;padding:20px;margin-bottom:20px}
+.criteria-panel h3{font-size:0.95rem;font-weight:800;color:#065f46;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.crit-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.crit-cols{grid-template-columns:1fr}}
+.crit-col h4{font-size:0.82rem;font-weight:800;padding:8px 12px;border-radius:8px 8px 0 0;text-align:center}
+.inc-h{background:#d1fae5;color:#065f46}.exc-h{background:#fee2e2;color:#991b1b}
+.crit-item{font-size:0.78rem;padding:8px 10px;border-bottom:1px solid #f3f4f6;display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+.crit-item:hover{background:#f0fdf4}
+.crit-skill{font-size:0.65rem;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.sk0{background:#fff3cd;color:#856404}.sk1{background:#d1e7dd;color:#0f5132}
+.sk2{background:#cff4fc;color:#055160}.sk3{background:#e2d9f3;color:#432874}
+.crit-text{color:#374151;flex:1}
+
+.skill-legend{display:flex;gap:8px;flex-wrap:wrap;font-size:0.68rem;padding:8px 12px;background:#f9fafb;border-radius:8px;margin-bottom:12px}
+.skill-legend span{font-weight:700;padding:2px 8px;border-radius:4px}
+
+/* ── Stats bar ── */
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:#fff;border:1px solid #d1fae5;border-radius:14px;padding:16px;text-align:center;box-shadow:0 2px 8px rgba(5,150,105,.05)}
+.stat-num{font-size:1.5rem;font-weight:800;color:#059669}
+.stat-num.red{color:#dc2626}.stat-num.amber{color:#d97706}
+.stat-label{font-size:0.72rem;color:#6b7280;font-weight:600;margin-top:3px}
+
+/* ── Donut chart ── */
+.donut-wrap{display:flex;align-items:center;justify-content:center;gap:24px;margin-bottom:20px;padding:16px;background:#fff;border:1px solid #d1fae5;border-radius:16px}
+.donut-legend{font-size:0.8rem;line-height:2}
+.donut-legend b{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;margin-right:6px}
+
+/* ── Patient results table ── */
+.results-panel{background:#fff;border:1px solid #d1fae5;border-radius:16px;padding:20px;margin-bottom:20px}
+.results-panel h3{font-size:0.95rem;font-weight:800;color:#065f46;margin-bottom:4px}
+.results-controls{display:flex;gap:10px;align-items:center;margin:10px 0;flex-wrap:wrap}
+.results-controls input,.results-controls select{border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;font-size:0.8rem;outline:none}
+.results-controls input:focus,.results-controls select:focus{border-color:#059669}
+.sort-btn{border:1px solid #d1d5db;border-radius:6px;padding:4px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;background:#fff;color:#374151}
+.sort-btn.active{background:#059669;color:#fff;border-color:#059669}
+
+.pt-table{width:100%;border-collapse:collapse;font-size:0.78rem}
+.pt-table th{background:#f0fdf4;text-align:left;padding:10px;font-weight:700;color:#065f46;border-bottom:2px solid #d1fae5;font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;z-index:1;cursor:pointer;user-select:none}
+.pt-table th:hover{background:#d1fae5}
+.pt-table td{padding:9px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+.pt-table tr:hover td{background:#ecfdf5}
+.pt-table tr.eligible td{background:#f0fdf4}
+.pt-table tr.ineligible td{}
+
+.result-badge{font-weight:800;font-size:0.78rem;padding:3px 10px;border-radius:6px;display:inline-block}
+.rb-eligible{background:#d1fae5;color:#065f46}
+.rb-ineligible{background:#fee2e2;color:#991b1b}
+.rb-partial{background:#fef3c7;color:#92400e}
+
+.score-bar{width:80px;height:8px;background:#e5e7eb;border-radius:4px;display:inline-block;vertical-align:middle;margin-right:6px;overflow:hidden}
+.score-fill{height:100%;border-radius:4px}
+
+.criteria-detail{font-size:0.72rem;line-height:1.6;color:#4b5563}
+.cd-pass{color:#059669;font-weight:700}.cd-fail{color:#dc2626;font-weight:700}.cd-unknown{color:#d97706}
+
+/* ── Expand row ── */
+.expand-row td{padding:0!important;border:none}
+.expand-content{padding:14px 20px;background:#f9fafb;border-bottom:2px solid #d1fae5}
+.expand-content h4{font-size:0.82rem;font-weight:700;color:#065f46;margin-bottom:8px}
+.ec-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.ec-grid{grid-template-columns:1fr}}
+.ec-section{margin-bottom:10px}
+.ec-section h5{font-size:0.72rem;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:4px}
+.ec-items{display:flex;flex-wrap:wrap;gap:4px}
+.ec-tag{font-size:0.68rem;padding:2px 7px;border-radius:4px;font-weight:600}
+.ec-dx{background:#fef3c7;color:#92400e}
+.ec-med{background:#dbeafe;color:#1e40af}
+.ec-proc{background:#d1fae5;color:#065f46}
+.ec-lab{background:#f3e8ff;color:#6b21a8}
+
+.crit-result-table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-top:8px}
+.crit-result-table th{background:#f0fdf4;padding:6px 8px;text-align:left;font-weight:700;border-bottom:1px solid #d1fae5}
+.crit-result-table td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
+
+.source-note{text-align:center;padding:20px;font-size:0.72rem;color:#9ca3af}
+.source-note a{color:#059669}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Single Trial Patient Screening</h1>
+  <p>Select one clinical trial, screen all 100 MIMIC-IV demo patients against its eligibility criteria ·
+    <a href="index.html">Back to Multi-Trial View</a></p>
+</header>
+
+<div class="toolbar">
+  <label>Select Trial:</label>
+  <select id="trialSelect" onchange="onTrialSelect()">
+    <option value="">Loading trials...</option>
+  </select>
+  <button class="btn btn-green" onclick="loadData()">Reload</button>
+  <span class="badge-count" id="statusBadge">Loading...</span>
+</div>
+
+<div class="page">
+  <div id="mainContent">
+    <div class="loading"><div class="spinner"></div>Fetching trials from ClinicalTrials.gov & loading patient data...</div>
+  </div>
+
+  <div class="source-note">
+    Patient data from <a href="https://physionet.org/content/mimic-iv-demo/2.2/" target="_blank">MIMIC-IV Demo v2.2</a> ·
+    Trial data from <a href="https://clinicaltrials.gov" target="_blank">ClinicalTrials.gov</a> API ·
+    Classification: <a href="index.html">S0–S3 EHR skill scheme</a>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   CORE ENGINE — same evaluators as index.html
+   ═══════════════════════════════════════════════════════════ */
+let PATIENTS = [], TRIALS = [];
+let currentTrial = null, currentResults = [];
+let sortCol = 'score', sortDir = -1; // desc by default
+
+const SKILLS = [
+  {key:'S0',label:'S0 Undeterminable',cls:'sk0',rx:/willing(?:ness)?\s+to\s+(?:comply|participate|sign|return|follow|undergo)|able\s+to\s+(?:understand|provide|return|follow|comply|give\s+consent)|(?:written|informed)\s+consent|investigator['']?s?\s+(?:judg|opini|discret|assess)|life\s+expectancy|within\s+\d+\s+hours?\s+of\s+(?:randomiz|enroll|first\s+dose)|plan(?:ning)?\s+to|intend(?:ing)?\s+to|language\b|geograph|follow.?up\s+(?:visit|possible)/i},
+  {key:'S1',label:'S1 Structured',cls:'sk1',rx:/(?:\bage\b|years?\s+of\s+age|aged?\b).*?\d|\d+.*?years?\s+(?:of\s+age|old)\b|(?:≥|≤|>=|<=|>\s*\d|<\s*\d).*?(?:year|age|mmHg|bpm|kg|mg\/(?:d[Ll]|L)|mmol\/[Ll]|μmol|ng\/(?:m[Ll]|dL)|U\/[Ll]|g\/d[Ll]|%|mL\/min|cm|m²)|hemoglobin|hematocrit|platelet\s*count|creatinine|eGFR\b|GFR\b|HbA1c|fasting\s+glucose|total\s+cholesterol|LDL\b|HDL\b|triglyceride|ALT\b|AST\b|bilirubin|INR\b|PT\b(?!T)|PTT\b|WBC\b|potassium|sodium|serum\s+\w+|blood\s+count|systolic|diastolic|blood\s+pressure\b|heart\s+rate\b|BMI\b|body\s+mass\s+index|body\s+weight\b|sex\s*[:=]|gender\s*[:=]|^(?:female|male)\b|(?:female|male)\s+(?:sex|gender|only)|currently\s+(?:taking|receiving|on)\s+|on\s+(?:stable\s+)?(?:statin|aspirin|heparin|warfarin|insulin|anticoagul|antiplatelet|beta.block|ACE\s+inhibit|ARB\b|metformin)/i},
+  {key:'S2',label:'S2 Notes',cls:'sk2',rx:/(?:history\s+of|medical\s+history|past\s+(?:medical|surgical|cardiac)|prior\s+(?:episode|admission|hospitalization|treatment|diagnosis)|previous\s+(?:episode|admission|treatment)|documented\s+(?:history|diagnosis)|known\s+(?:history|to\s+have))|(?:underwent|had\s+(?:a|an|prior|previous)\s+(?:surgery|procedure|operation))|(?:functional\s+status|NYHA\s+class|functional\s+capacity)|(?:smok(?:ing|er|ed)|tobacco|alcohol(?:ic|ism)?|substance\s+abuse|drug\s+abuse)|(?:cognitive\s+(?:impair|dysfunct)|dementia|psychiatric|depression)/i},
+  {key:'S3',label:'S3 Hybrid',cls:'sk3',rx:/CABG\b|PCI\b|percutaneous\s+coronary|coronary\s+artery\s+bypass|stent(?:ing)?\b|angioplasty|cardiac\s+transplant|heart\s+transplant|implant(?:able|ed)\s+(?:cardioverter|defibrillat|pacemaker|ICD|CRT)|ICD\b|defibrillat|pacemaker|catheter\s+ablation|ablation|revascular|heart\s+failure|cardiomyopathy|atrial\s+fibrillat|coronary\s+artery\s+disease|CAD\b|myocardial\s+infarction\b|MI\b|diabetes\s+mellitus|type\s+[12]\s+diabetes|hypertension|chronic\s+kidney|renal\s+(?:insufficiency|failure|impairment)|hepat(?:ic|itis)|cirrhosis|liver\s+(?:disease|failure)|COPD\b|cancer\b|malign|stroke\b|TIA\b|peripheral\s+artery|anemia\b|thrombocytopenia/i},
+];
+function classifySkill(t){if(SKILLS[0].rx.test(t))return SKILLS[0];if(SKILLS[1].rx.test(t))return SKILLS[1];if(SKILLS[3].rx.test(t))return SKILLS[3];if(SKILLS[2].rx.test(t))return SKILLS[2];return SKILLS[2]}
+
+function parseEligibility(raw){if(!raw)return{inclusion:[],exclusion:[]};const a=raw.match(/inclus(?:ion)?\s+criteria?\s*[:\n]/i),b=raw.match(/exclus(?:ion)?\s+criteria?\s*[:\n]/i);let i='',e='';if(a&&b){const as=a.index+a[0].length,bs=b.index+b[0].length;if(as<bs){i=raw.slice(as,b.index);e=raw.slice(bs)}else{e=raw.slice(bs,a.index);i=raw.slice(as)}}else if(a)i=raw.slice(a.index+a[0].length);else if(b)e=raw.slice(b.index+b[0].length);else i=raw;return{inclusion:extractItems(i),exclusion:extractItems(e)}}
+function extractItems(t){if(!t)return[];return t.replace(/\\n/g,'\n').replace(/\\\[/g,'[').replace(/\\\]/g,']').split(/\n/).map(l=>l.replace(/^\s*[\d]+[.)]\s*/,'').replace(/^\s*[-•*]\s*/,'').trim()).filter(l=>l.length>8&&!/^(patients?|subjects?|participants?)\s+(will\s+be\s+)?(excluded|included)\s+if/i.test(l))}
+
+function evalAge(text,p){const pats=[{rx:/(?:≥|>=|at\s+least|older\s+than|minimum\s+(?:age\s+)?(?:of\s+)?)\s*(\d+)\s*(?:years|yrs)?/i,type:'min'},{rx:/(?:≤|<=|no\s+(?:more|older)\s+than|younger\s+than|maximum\s+(?:age\s+)?(?:of\s+)?|up\s+to)\s*(\d+)\s*(?:years|yrs)?/i,type:'max'},{rx:/(?:age[ds]?\s+)?(\d+)\s*(?:to|-)\s*(\d+)\s*(?:years|yrs)/i,type:'range'},{rx:/(?:age[ds]?\s+)?(?:≥|>=?)\s*(\d+)/i,type:'min'},{rx:/(?:age[ds]?\s+)?(?:≤|<=?)\s*(\d+)/i,type:'max'},{rx:/(\d+)\s*(?:years?\s+of\s+age|years?\s+old)\s+(?:or|and)\s+older/i,type:'min'},{rx:/(\d+)\s*(?:years?\s+of\s+age|years?\s+old)\s+(?:or|and)\s+younger/i,type:'max'}];for(const pt of pats){const m=text.match(pt.rx);if(!m)continue;if(pt.type==='range'){const lo=+m[1],hi=+m[2],pass=p.age>=lo&&p.age<=hi;return{evaluated:true,pass,evidence:`Age ${p.age} ${pass?'within':'outside'} ${lo}-${hi}`}}if(pt.type==='min'){const v=+m[1],pass=p.age>=v;return{evaluated:true,pass,evidence:`Age ${p.age} ${pass?'>=':'<'} ${v}`}}if(pt.type==='max'){const v=+m[1],pass=p.age<=v;return{evaluated:true,pass,evidence:`Age ${p.age} ${pass?'<=':'>'} ${v}`}}}return null}
+
+function evalSex(text,p){if(/\b(?:male|men)\s+(?:only|patients?|subjects?|participants?)\b/i.test(text)||/\bsex\s*[:=]\s*male\b/i.test(text)){const pass=p.gender==='M';return{evaluated:true,pass,evidence:`Gender ${p.gender} ${pass?'matches':'≠'} male-only`}}if(/\b(?:female|women)\s+(?:only|patients?|subjects?|participants?)\b/i.test(text)||/\bsex\s*[:=]\s*female\b/i.test(text)){const pass=p.gender==='F';return{evaluated:true,pass,evidence:`Gender ${p.gender} ${pass?'matches':'≠'} female-only`}}return null}
+
+const LAB_PATTERNS=[{rx:/hemoglobin\s*(?:≥|>=?|>|of\s+at\s+least)\s*([\d.]+)/i,lab:'Hemoglobin',op:'>='},{rx:/hemoglobin\s*(?:≤|<=?|<|less\s+than)\s*([\d.]+)/i,lab:'Hemoglobin',op:'<='},{rx:/(?:serum\s+)?creatinine\s*(?:≤|<=?|<|less\s+than|below)\s*([\d.]+)/i,lab:'Creatinine',op:'<='},{rx:/(?:serum\s+)?creatinine\s*(?:≥|>=?|>|(?:greater|more)\s+than|above|at\s+least)\s*([\d.]+)/i,lab:'Creatinine',op:'>='},{rx:/platelet\s*(?:count)?\s*(?:≥|>=?|>|at\s+least|above)\s*([\d,.]+)/i,lab:'Platelet Count',op:'>='},{rx:/platelet\s*(?:count)?\s*(?:≤|<=?|<|below|less\s+than)\s*([\d,.]+)/i,lab:'Platelet Count',op:'<='},{rx:/(?:eGFR|GFR|glomerular\s+filtration)\s*(?:≥|>=?|>|at\s+least|above)\s*([\d.]+)/i,lab:'eGFR',op:'>='},{rx:/INR\s*(?:≤|<=?|<|less\s+than|below)\s*([\d.]+)/i,lab:'INR',op:'<='},{rx:/INR\s*(?:≥|>=?|>|(?:greater|more)\s+than|above)\s*([\d.]+)/i,lab:'INR',op:'>='},{rx:/(?:total\s+)?bilirubin\s*(?:≤|<=?|<|less\s+than|below)\s*([\d.]+)/i,lab:'Bilirubin Total',op:'<='},{rx:/ALT\s*(?:≤|<=?|<|less\s+than|below)\s*([\d.]+)/i,lab:'ALT',op:'<='},{rx:/AST\s*(?:≤|<=?|<|less\s+than|below)\s*([\d.]+)/i,lab:'AST',op:'<='},{rx:/(?:WBC|white\s+blood\s+cell)\s*(?:count)?\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'WBC Count',op:'>='},{rx:/(?:WBC|white\s+blood\s+cell)\s*(?:count)?\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'WBC Count',op:'<='},{rx:/potassium\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'Potassium',op:'>='},{rx:/potassium\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'Potassium',op:'<='},{rx:/sodium\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'Sodium',op:'>='},{rx:/sodium\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'Sodium',op:'<='},{rx:/HbA1c\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'HbA1c',op:'<='},{rx:/HbA1c\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'HbA1c',op:'>='},{rx:/(?:total\s+)?cholesterol\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'Cholesterol Total',op:'>='},{rx:/(?:total\s+)?cholesterol\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'Cholesterol Total',op:'<='},{rx:/LDL\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'Cholesterol LDL',op:'>='},{rx:/LDL\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'Cholesterol LDL',op:'<='},{rx:/troponin\s*(?:I|T)?\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'Troponin T',op:'>='},{rx:/troponin\s*(?:I|T)?\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'Troponin T',op:'<='},{rx:/hematocrit\s*(?:≥|>=?|>)\s*([\d.]+)/i,lab:'Hematocrit',op:'>='},{rx:/hematocrit\s*(?:≤|<=?|<)\s*([\d.]+)/i,lab:'Hematocrit',op:'<='}];
+function evalLab(text,p){for(const lp of LAB_PATTERNS){const m=text.match(lp.rx);if(!m)continue;const th=parseFloat(m[1].replace(/,/g,''));const ld=p.labs[lp.lab];if(!ld)return{evaluated:true,pass:null,evidence:`No ${lp.lab} data`};const v=ld.v;let pass;if(lp.op==='>=')pass=v>=th;else if(lp.op==='<=')pass=v<=th;else if(lp.op==='>')pass=v>th;else pass=v<th;return{evaluated:true,pass,evidence:`${lp.lab}: ${v} ${ld.u||''} ${pass?'meets':'fails'} ${lp.op} ${th}`}}return null}
+
+function evalMedication(text,p){const drugs=['statin','aspirin','heparin','warfarin','clopidogrel','insulin','metformin','atorvastatin','rosuvastatin','simvastatin','lisinopril','enalapril','ramipril','losartan','valsartan','metoprolol','carvedilol','atenolol','bisoprolol','amlodipine','amiodarone','digoxin','furosemide','spironolactone','hydrochlorothiazide','rivaroxaban','apixaban','dabigatran','ticagrelor','prasugrel','enoxaparin','nitroglycerin'];const tl=text.toLowerCase();for(const dk of drugs){if(tl.includes(dk)){const has=p.meds.some(m=>m.toLowerCase().includes(dk));if(/(?:not|no|without|never|absence|exclude|prohibited|contraindicated)/i.test(text))return{evaluated:true,pass:!has,evidence:`${dk}: ${has?'found (excluded)':'not found (OK)'}`};return{evaluated:true,pass:has,evidence:`${dk}: ${has?'found':'not found'}`}}}const cm={'beta.?block':['metoprolol','carvedilol','atenolol','bisoprolol','propranolol','labetalol'],'ACE\\s+inhibit':['lisinopril','enalapril','ramipril','captopril','benazepril'],'\\bARB\\b|angiotensin.*receptor.*block':['losartan','valsartan','irbesartan','olmesartan','candesartan'],'anticoagul':['warfarin','heparin','enoxaparin','rivaroxaban','apixaban','dabigatran'],'antiplatelet':['aspirin','clopidogrel','ticagrelor','prasugrel'],'statin':['atorvastatin','rosuvastatin','simvastatin','pravastatin','lovastatin']};for(const[pat,drs]of Object.entries(cm)){if(new RegExp(pat,'i').test(text)){const found=drs.filter(d=>p.meds.some(m=>m.toLowerCase().includes(d)));const has=found.length>0;if(/(?:not|no|without|never|absence|exclude|prohibited)/i.test(text))return{evaluated:true,pass:!has,evidence:`Class: ${has?found.join(', ')+' (excluded)':'none (OK)'}`};return{evaluated:true,pass:has,evidence:`Class: ${has?found.join(', '):'none found'}`}}}return null}
+
+const DX_KW={'myocardial infarction':['myocardial infarction','acute mi','stemi','nstemi','heart attack'],'heart failure':['heart failure','cardiomyopathy','congestive heart','chf'],'atrial fibrillation':['atrial fibrillation','atrial flutter','afib'],'coronary artery disease':['coronary artery disease','cad','coronary atherosclerosis','ischemic heart'],'hypertension':['hypertension','hypertensive','essential hypertension'],'diabetes':['diabetes mellitus','diabetic','type 1 diabetes','type 2 diabetes'],'stroke':['stroke','cerebrovascular accident','cva','cerebral infarction','transient ischemic'],'chronic kidney':['chronic kidney','renal failure','renal insufficiency','ckd','end stage renal'],'liver disease':['hepatic','cirrhosis','liver disease','liver failure','hepatitis'],'copd':['copd','chronic obstructive','emphysema'],'cancer':['cancer','malignant','neoplasm','tumor','carcinoma','lymphoma','leukemia'],'valve':['valve','valvular','mitral','aortic stenosis','tricuspid'],'peripheral artery':['peripheral artery','peripheral vascular','pad','pvd'],'anemia':['anemia','anaemia'],'pci':['angioplasty','percutaneous coronary','pci','stent'],'cabg':['coronary artery bypass','cabg','bypass graft'],'pacemaker':['pacemaker','cardiac resynchronization','crt','implantable cardioverter','icd']};
+function evalDiagnosis(text,p){const tl=text.toLowerCase();for(const[c,kws]of Object.entries(DX_KW)){if(kws.some(k=>tl.includes(k))){const has=p.dx.some(dx=>kws.some(k=>dx.toLowerCase().includes(k)))||p.procs.some(pr=>kws.some(k=>pr.toLowerCase().includes(k)));if(/(?:no\s+(?:history|evidence|diagnosis|known)|without|absence|exclude|not\s+have|never\s+had|free\s+of)/i.test(text))return{evaluated:true,pass:!has,evidence:`${c}: ${has?'found (excluded)':'not found (OK)'}`};return{evaluated:true,pass:has,evidence:`${c}: ${has?'found':'not found'}`}}}return null}
+
+function evaluateCriterion(text,p,isExc){const sk=classifySkill(text);let r=evalAge(text,p)||evalSex(text,p)||evalLab(text,p)||evalMedication(text,p)||evalDiagnosis(text,p);if(!r)return{skill:sk,evaluated:false,pass:null,evidence:'Cannot evaluate from structured EHR data',text};let fp=r.pass;if(isExc&&r.pass!==null)fp=!r.pass;return{skill:sk,evaluated:r.evaluated,pass:fp,evidence:r.evidence,text}}
+
+function matchPatient(p,trial){const inc=trial.inclusion.map(c=>evaluateCriterion(c,p,false));const exc=trial.exclusion.map(c=>evaluateCriterion(c,p,true));const all=[...inc,...exc];const ev=all.filter(r=>r.evaluated&&r.pass!==null);const passed=ev.filter(r=>r.pass);const failed=ev.filter(r=>!r.pass);const unk=all.filter(r=>!r.evaluated||r.pass===null);const score=ev.length?Math.round(100*passed.length/ev.length):0;return{inclusion:inc,exclusion:exc,passed:passed.length,failed:failed.length,unknown:unk.length,total:all.length,score,eligible:failed.length===0&&passed.length>0}}
+
+/* ═══════════════════════════════════════════════════════════
+   API / DATA
+   ═══════════════════════════════════════════════════════════ */
+async function fetchTrials(){
+  const url='https://clinicaltrials.gov/api/v2/studies?query.cond=heart+attack+cardiology&filter.overallStatus=COMPLETED&aggFilters=results%3Awith&pageSize=10&format=json';
+  const res=await fetch(url);if(!res.ok)throw new Error('API '+res.status);const data=await res.json();
+  return(data.studies||[]).map(s=>{const p=s.protocolSection,id=p.identificationModule||{},des=p.descriptionModule||{},des2=p.designModule||{},spon=p.sponsorCollaboratorsModule||{},elig=p.eligibilityModule||{},raw=elig.eligibilityCriteria||'',parsed=parseEligibility(raw),phases=(des2.phases||[]).map(ph=>ph.replace('PHASE','Phase ').replace('NA','N/A')).join(', ')||'N/A';return{nctId:id.nctId,title:id.briefTitle||'Untitled',phase:phases,sponsor:spon.leadSponsor?.name||'N/A',summary:des.briefSummary||'',enrollment:des2.enrollmentInfo?.count||0,eligSex:elig.sex||'All',eligMinAge:elig.minimumAge||'',eligMaxAge:elig.maximumAge||'',inclusion:parsed.inclusion,exclusion:parsed.exclusion}})
+}
+
+async function loadData(){
+  document.getElementById('mainContent').innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
+  document.getElementById('statusBadge').textContent='Loading...';
+  try{
+    const pr=await fetch('mimic_demo/patients_compiled.json');
+    if(!pr.ok)throw new Error('Patient data not found. Serve from the repo root.');
+    PATIENTS=await pr.json();
+    TRIALS=await fetchTrials();
+    // Populate dropdown
+    const sel=document.getElementById('trialSelect');
+    sel.innerHTML='<option value="">-- Choose a trial to screen --</option>'+TRIALS.map((t,i)=>`<option value="${i}">${t.nctId} — ${t.title}</option>`).join('');
+    document.getElementById('statusBadge').textContent=`${PATIENTS.length} patients · ${TRIALS.length} trials`;
+    document.getElementById('mainContent').innerHTML='<div style="text-align:center;padding:60px;color:#6b7280;font-size:1rem">Select a trial from the dropdown above to begin screening.</div>';
+  }catch(e){
+    document.getElementById('mainContent').innerHTML=`<div style="background:#fff;border:1px solid #fee2e2;border-radius:12px;padding:20px;color:#dc2626;text-align:center"><b>Error:</b> ${e.message}<br><br><button class="btn btn-green" onclick="loadData()">Retry</button></div>`;
+    document.getElementById('statusBadge').textContent='Error';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ON TRIAL SELECT — run screening
+   ═══════════════════════════════════════════════════════════ */
+function onTrialSelect(){
+  const idx=document.getElementById('trialSelect').value;
+  if(idx===''){document.getElementById('mainContent').innerHTML='<div style="text-align:center;padding:60px;color:#6b7280">Select a trial above.</div>';return}
+  currentTrial=TRIALS[+idx];
+  // Screen all patients
+  currentResults=PATIENTS.map((p,i)=>({patient:p,idx:i,...matchPatient(p,currentTrial)}));
+  sortCol='score';sortDir=-1;
+  renderAll();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDERING
+   ═══════════════════════════════════════════════════════════ */
+function renderAll(){
+  const t=currentTrial,r=currentResults;
+  const eligible=r.filter(x=>x.eligible),ineligible=r.filter(x=>!x.eligible);
+  const avgScore=r.length?Math.round(r.reduce((s,x)=>s+x.score,0)/r.length):0;
+  const totalCrit=t.inclusion.length+t.exclusion.length;
+
+  // Criteria skill breakdown
+  const allCrit=[...t.inclusion,...t.exclusion];
+  const skillCounts={S0:0,S1:0,S2:0,S3:0};
+  allCrit.forEach(c=>{const sk=classifySkill(c);skillCounts[sk.key]++});
+
+  let html='';
+
+  // ── Trial info
+  html+=`
+  <div class="trial-panel">
+    <span class="tp-nct">${t.nctId}</span>
+    <div class="tp-title">${t.title}</div>
+    <div class="tp-meta">
+      <span><b>Phase:</b> ${t.phase}</span>
+      <span><b>Sponsor:</b> ${t.sponsor}</span>
+      <span><b>Enrollment:</b> ${t.enrollment.toLocaleString()}</span>
+      <span><b>Sex:</b> ${t.eligSex}</span>
+      ${t.eligMinAge?`<span><b>Min Age:</b> ${t.eligMinAge}</span>`:''}
+      ${t.eligMaxAge?`<span><b>Max Age:</b> ${t.eligMaxAge}</span>`:''}
+    </div>
+    ${t.summary?`<div class="tp-summary">${t.summary}</div>`:''}
+    <a href="https://clinicaltrials.gov/study/${t.nctId}" target="_blank" class="btn btn-outline" style="font-size:0.78rem">View on ClinicalTrials.gov</a>
+  </div>`;
+
+  // ── Stats
+  html+=`
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-num">${eligible.length}</div><div class="stat-label">Potentially Eligible</div></div>
+    <div class="stat-card"><div class="stat-num red">${ineligible.length}</div><div class="stat-label">Not Eligible</div></div>
+    <div class="stat-card"><div class="stat-num">${avgScore}%</div><div class="stat-label">Avg Match Score</div></div>
+    <div class="stat-card"><div class="stat-num">${totalCrit}</div><div class="stat-label">Total Criteria</div></div>
+    <div class="stat-card"><div class="stat-num">${skillCounts.S1}</div><div class="stat-label">S1 Structured</div></div>
+    <div class="stat-card"><div class="stat-num amber">${skillCounts.S0+skillCounts.S2}</div><div class="stat-label">S0/S2 Unevaluable</div></div>
+  </div>`;
+
+  // ── Donut chart (SVG)
+  const pctElig=r.length?eligible.length/r.length:0;
+  const pctInelig=1-pctElig;
+  const r1=70,cx=80,cy=80,circ=2*Math.PI*r1;
+  const d1=circ*pctElig,d2=circ*pctInelig;
+  html+=`
+  <div class="donut-wrap">
+    <svg width="160" height="160" viewBox="0 0 160 160">
+      <circle cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="#d1fae5" stroke-width="20"/>
+      <circle cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="#10b981" stroke-width="20"
+        stroke-dasharray="${d1} ${circ}" stroke-dashoffset="${circ*0.25}" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="${r1}" fill="none" stroke="#ef4444" stroke-width="20"
+        stroke-dasharray="${d2} ${circ}" stroke-dashoffset="${circ*0.25 - d1}" stroke-linecap="round"/>
+      <text x="${cx}" y="${cy-6}" text-anchor="middle" font-size="22" font-weight="800" fill="#065f46">${Math.round(pctElig*100)}%</text>
+      <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="10" fill="#6b7280">eligible</text>
+    </svg>
+    <div class="donut-legend">
+      <div><b style="background:#10b981"></b> ${eligible.length} Potentially Eligible (${Math.round(pctElig*100)}%)</div>
+      <div><b style="background:#ef4444"></b> ${ineligible.length} Not Eligible / Insufficient Data</div>
+      <div style="margin-top:8px;font-size:0.72rem;color:#9ca3af">Based on ${skillCounts.S1+skillCounts.S3} evaluable criteria out of ${totalCrit} total</div>
+    </div>
+  </div>`;
+
+  // ── Criteria panel
+  html+=`
+  <div class="criteria-panel">
+    <h3>Eligibility Criteria (${totalCrit})</h3>
+    <div class="skill-legend">
+      <span class="sk0">S0 Undeterminable</span>
+      <span class="sk1">S1 Structured Data</span>
+      <span class="sk2">S2 Clinical Notes</span>
+      <span class="sk3">S3 Hybrid</span>
+    </div>
+    <div class="crit-cols">
+      <div class="crit-col">
+        <h4 class="inc-h">Inclusion (${t.inclusion.length})</h4>
+        ${t.inclusion.map(c=>{const sk=classifySkill(c);return`<div class="crit-item"><span class="crit-skill ${sk.cls}">${sk.key}</span><span class="crit-text">${esc(c)}</span></div>`}).join('')||'<div style="padding:10px;color:#9ca3af;font-size:0.8rem">None listed</div>'}
+      </div>
+      <div class="crit-col">
+        <h4 class="exc-h">Exclusion (${t.exclusion.length})</h4>
+        ${t.exclusion.map(c=>{const sk=classifySkill(c);return`<div class="crit-item"><span class="crit-skill ${sk.cls}">${sk.key}</span><span class="crit-text">${esc(c)}</span></div>`}).join('')||'<div style="padding:10px;color:#9ca3af;font-size:0.8rem">None listed</div>'}
+      </div>
+    </div>
+  </div>`;
+
+  // ── Patient results table
+  html+=`
+  <div class="results-panel">
+    <h3>Patient Screening Results</h3>
+    <div class="results-controls">
+      <input type="text" id="ptSearch" placeholder="Search patient ID, diagnosis, medication..." oninput="renderTable()" style="width:300px">
+      <select id="ptFilter" onchange="renderTable()">
+        <option value="all">All Patients</option>
+        <option value="eligible">Eligible Only</option>
+        <option value="ineligible">Not Eligible Only</option>
+      </select>
+      <span style="font-size:0.72rem;color:#6b7280;margin-left:auto">Click column headers to sort · Click row to expand</span>
+    </div>
+    <div id="ptTableWrap" style="max-height:700px;overflow-y:auto"></div>
+  </div>`;
+
+  document.getElementById('mainContent').innerHTML=html;
+  renderTable();
+}
+
+function renderTable(){
+  const q=(document.getElementById('ptSearch')?.value||'').toLowerCase();
+  const f=document.getElementById('ptFilter')?.value||'all';
+  let rows=currentResults.slice();
+
+  // Filter
+  if(f==='eligible')rows=rows.filter(r=>r.eligible);
+  if(f==='ineligible')rows=rows.filter(r=>!r.eligible);
+  if(q)rows=rows.filter(r=>{const p=r.patient;return p.id.includes(q)||p.dx.some(d=>d.toLowerCase().includes(q))||p.meds.some(m=>m.toLowerCase().includes(q))||p.race.toLowerCase().includes(q)});
+
+  // Sort
+  rows.sort((a,b)=>{
+    let va,vb;
+    if(sortCol==='id'){va=a.patient.id;vb=b.patient.id}
+    else if(sortCol==='age'){va=a.patient.age;vb=b.patient.age}
+    else if(sortCol==='gender'){va=a.patient.gender;vb=b.patient.gender}
+    else if(sortCol==='score'){va=a.score;vb=b.score}
+    else if(sortCol==='passed'){va=a.passed;vb=b.passed}
+    else if(sortCol==='failed'){va=a.failed;vb=b.failed}
+    else if(sortCol==='result'){va=a.eligible?1:0;vb=b.eligible?1:0}
+    else{va=a.score;vb=b.score}
+    if(va<vb)return -1*sortDir;if(va>vb)return 1*sortDir;return 0;
+  });
+
+  const arrow=c=>sortCol===c?(sortDir===1?'&#9650;':'&#9660;'):'';
+  let html=`<table class="pt-table">
+    <thead><tr>
+      <th onclick="doSort('id')">Patient ${arrow('id')}</th>
+      <th onclick="doSort('age')">Age ${arrow('age')}</th>
+      <th onclick="doSort('gender')">Sex ${arrow('gender')}</th>
+      <th onclick="doSort('score')" style="min-width:130px">Score ${arrow('score')}</th>
+      <th onclick="doSort('passed')">Pass ${arrow('passed')}</th>
+      <th onclick="doSort('failed')">Fail ${arrow('failed')}</th>
+      <th>Unknown</th>
+      <th onclick="doSort('result')">Result ${arrow('result')}</th>
+      <th>Key Evidence</th>
+    </tr></thead><tbody>`;
+
+  for(const r of rows){
+    const p=r.patient;
+    const barColor=r.score>=80?'#10b981':r.score>=50?'#f59e0b':'#ef4444';
+    const cls=r.eligible?'eligible':'ineligible';
+    const rbCls=r.eligible?'rb-eligible':r.failed>0?'rb-ineligible':'rb-partial';
+    const rbText=r.eligible?'ELIGIBLE':r.failed>0?'NOT ELIGIBLE':'INSUFFICIENT';
+
+    // Key evidence: first 2 failed or first 2 passed
+    const failEv=[...r.inclusion,...r.exclusion].filter(x=>x.pass===false).slice(0,2);
+    const passEv=[...r.inclusion,...r.exclusion].filter(x=>x.pass===true).slice(0,2);
+    const evHtml=failEv.map(e=>`<span class="cd-fail">FAIL: ${e.evidence}</span>`).concat(
+      passEv.map(e=>`<span class="cd-pass">PASS: ${e.evidence}</span>`)
+    ).join('<br>');
+
+    html+=`<tr class="${cls}" onclick="toggleExpand(${r.idx})" style="cursor:pointer">
+      <td><b>${p.id}</b></td>
+      <td>${p.age}</td>
+      <td>${p.gender}</td>
+      <td><span class="score-bar"><span class="score-fill" style="width:${r.score}%;background:${barColor}"></span></span>${r.score}%</td>
+      <td style="color:#059669;font-weight:700">${r.passed}</td>
+      <td style="color:#dc2626;font-weight:700">${r.failed}</td>
+      <td style="color:#d97706">${r.unknown}</td>
+      <td><span class="result-badge ${rbCls}">${rbText}</span></td>
+      <td class="criteria-detail">${evHtml||'<span class="cd-unknown">No evaluable criteria</span>'}</td>
+    </tr>
+    <tr class="expand-row" id="expand_${r.idx}" style="display:none">
+      <td colspan="9"></td>
+    </tr>`;
+  }
+  html+='</tbody></table>';
+  html+=`<div style="text-align:center;font-size:0.75rem;color:#9ca3af;margin-top:8px">Showing ${rows.length} of ${currentResults.length} patients</div>`;
+
+  document.getElementById('ptTableWrap').innerHTML=html;
+}
+
+function doSort(col){
+  if(sortCol===col)sortDir*=-1;
+  else{sortCol=col;sortDir=col==='id'||col==='gender'?1:-1}
+  renderTable();
+}
+
+function toggleExpand(idx){
+  const row=document.getElementById('expand_'+idx);
+  if(!row)return;
+  if(row.style.display==='none'){
+    // Close all others
+    document.querySelectorAll('.expand-row').forEach(r=>r.style.display='none');
+    const r=currentResults.find(x=>x.idx===idx);
+    if(!r)return;
+    const p=r.patient;
+    const cardiacDx=p.dx.filter(d=>['heart','cardiac','myocardial','coronary','atrial','ventricul','valve','infarct','cardiomyop','aortic','mitral','hypertens','diabetes','renal','kidney'].some(k=>d.toLowerCase().includes(k)));
+
+    let detail=`<div class="expand-content">
+      <h4>Patient ${p.id} — ${p.gender==='M'?'Male':'Female'}, Age ${p.age} · ${p.race} · ${p.insurance}</h4>
+      <div class="ec-grid">
+        <div>
+          <div class="ec-section"><h5>Key Diagnoses (${cardiacDx.length} of ${p.dx.length})</h5>
+            <div class="ec-items">${cardiacDx.slice(0,15).map(d=>`<span class="ec-tag ec-dx">${d.length>50?d.slice(0,50)+'...':d}</span>`).join('')}${cardiacDx.length>15?`<span class="ec-tag" style="color:#6b7280">+${cardiacDx.length-15}</span>`:''}</div>
+          </div>
+          <div class="ec-section"><h5>Medications (${p.meds.length})</h5>
+            <div class="ec-items">${p.meds.slice(0,20).map(m=>`<span class="ec-tag ec-med">${m}</span>`).join('')}${p.meds.length>20?`<span class="ec-tag" style="color:#6b7280">+${p.meds.length-20}</span>`:''}</div>
+          </div>
+          <div class="ec-section"><h5>Procedures (${p.procs.length})</h5>
+            <div class="ec-items">${p.procs.map(pr=>`<span class="ec-tag ec-proc">${pr.length>50?pr.slice(0,50)+'...':pr}</span>`).join('')||'<span style="font-size:0.72rem;color:#9ca3af">None recorded</span>'}</div>
+          </div>
+        </div>
+        <div>
+          <div class="ec-section"><h5>Lab Values</h5>
+            <div class="ec-items">${Object.entries(p.labs).map(([k,v])=>`<span class="ec-tag ec-lab"><b>${k}:</b> ${v.v} ${v.u||''} ${v.f?'('+v.f+')':''}</span>`).join('')||'<span style="font-size:0.72rem;color:#9ca3af">No labs</span>'}</div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin-top:12px">Criteria-by-Criteria Results</h4>
+      <table class="crit-result-table">
+        <thead><tr><th>Skill</th><th>Type</th><th>Criterion</th><th>Result</th><th>Evidence</th></tr></thead>
+        <tbody>
+          ${r.inclusion.map(c=>`<tr>
+            <td><span class="crit-skill ${c.skill.cls}">${c.skill.key}</span></td>
+            <td style="color:#059669;font-weight:700">INC</td>
+            <td style="max-width:350px">${esc(c.text).slice(0,150)}${c.text.length>150?'...':''}</td>
+            <td style="font-weight:700;color:${c.pass===true?'#059669':c.pass===false?'#dc2626':'#d97706'}">${c.pass===true?'PASS':c.pass===false?'FAIL':c.evaluated?'N/A':'?'}</td>
+            <td style="font-size:0.7rem;color:#6b7280">${c.evidence}</td>
+          </tr>`).join('')}
+          ${r.exclusion.map(c=>`<tr>
+            <td><span class="crit-skill ${c.skill.cls}">${c.skill.key}</span></td>
+            <td style="color:#dc2626;font-weight:700">EXC</td>
+            <td style="max-width:350px">${esc(c.text).slice(0,150)}${c.text.length>150?'...':''}</td>
+            <td style="font-weight:700;color:${c.pass===true?'#059669':c.pass===false?'#dc2626':'#d97706'}">${c.pass===true?'PASS':c.pass===false?'FAIL':c.evaluated?'N/A':'?'}</td>
+            <td style="font-size:0.7rem;color:#6b7280">${c.evidence}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+    row.querySelector('td').innerHTML=detail;
+    row.style.display='';
+    row.scrollIntoView({behavior:'smooth',block:'nearest'});
+  } else {
+    row.style.display='none';
+  }
+}
+
+function esc(s){return s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+/* ═══════════════════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════════════════ */
+loadData();
+</script>
+</body>
+</html>
