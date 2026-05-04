@@ -288,26 +288,44 @@ function renderAll(){
     </div>
   </div>`;
 
-  // ── Criteria panel
+  // ── Criteria panel — grouped by skill level
+  const critBySkill = {};
+  t.inclusion.forEach(c => { const sk = classifySkill(c); (critBySkill[sk.key] = critBySkill[sk.key] || {skill:sk, inc:[], exc:[]}).inc.push(c); });
+  t.exclusion.forEach(c => { const sk = classifySkill(c); (critBySkill[sk.key] = critBySkill[sk.key] || {skill:sk, inc:[], exc:[]}).exc.push(c); });
+  const skillOrder = ['S0','S1','S2','S3'];
+  const skillDescriptions = {S0:'Cannot be assessed from EHR — needs prospective data or clinical judgment', S1:'Directly evaluable via SQL on EHR structured tables (labs, vitals, demographics, prescriptions)', S2:'Requires NLP/LLM search in unstructured clinical notes (history, procedures, subjective status)', S3:'Try structured EHR data first; fall back to clinical notes if unknown'};
+
   html+=`
   <div class="criteria-panel">
-    <h3>Eligibility Criteria (${totalCrit})</h3>
+    <h3>Eligibility Criteria (${totalCrit}) — Grouped by EHR Skill Level</h3>
     <div class="skill-legend">
       <span class="sk0">S0 Undeterminable</span>
       <span class="sk1">S1 Structured Data</span>
       <span class="sk2">S2 Clinical Notes</span>
       <span class="sk3">S3 Hybrid</span>
     </div>
-    <div class="crit-cols">
-      <div class="crit-col">
-        <h4 class="inc-h">Inclusion (${t.inclusion.length})</h4>
-        ${t.inclusion.map(c=>{const sk=classifySkill(c);return`<div class="crit-item"><span class="crit-skill ${sk.cls}">${sk.key}</span><span class="crit-text">${esc(c)}</span></div>`}).join('')||'<div style="padding:10px;color:#9ca3af;font-size:0.8rem">None listed</div>'}
-      </div>
-      <div class="crit-col">
-        <h4 class="exc-h">Exclusion (${t.exclusion.length})</h4>
-        ${t.exclusion.map(c=>{const sk=classifySkill(c);return`<div class="crit-item"><span class="crit-skill ${sk.cls}">${sk.key}</span><span class="crit-text">${esc(c)}</span></div>`}).join('')||'<div style="padding:10px;color:#9ca3af;font-size:0.8rem">None listed</div>'}
-      </div>
-    </div>
+    ${skillOrder.filter(k=>critBySkill[k]).map(k=>{
+      const g=critBySkill[k];
+      const totalInGroup=g.inc.length+g.exc.length;
+      return `
+      <div style="margin-bottom:16px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+        <div style="background:${k==='S0'?'#fff3cd':k==='S1'?'#d1e7dd':k==='S2'?'#cff4fc':'#e2d9f3'};padding:10px 16px;display:flex;align-items:center;gap:10px">
+          <span class="crit-skill ${g.skill.cls}" style="font-size:0.78rem;padding:4px 12px">${g.skill.key} — ${g.skill.label}</span>
+          <span style="font-size:0.75rem;color:#374151;font-weight:600">${totalInGroup} criteria</span>
+          <span style="font-size:0.7rem;color:#6b7280;margin-left:auto">${skillDescriptions[k]}</span>
+        </div>
+        <div class="crit-cols" style="padding:12px 16px">
+          <div class="crit-col">
+            <h4 class="inc-h" style="font-size:0.75rem;padding:6px 10px">Inclusion (${g.inc.length})</h4>
+            ${g.inc.map(c=>`<div class="crit-item"><span class="crit-text">${esc(c)}</span></div>`).join('')||'<div style="padding:8px;color:#9ca3af;font-size:0.78rem">None</div>'}
+          </div>
+          <div class="crit-col">
+            <h4 class="exc-h" style="font-size:0.75rem;padding:6px 10px">Exclusion (${g.exc.length})</h4>
+            ${g.exc.map(c=>`<div class="crit-item"><span class="crit-text">${esc(c)}</span></div>`).join('')||'<div style="padding:8px;color:#9ca3af;font-size:0.78rem">None</div>'}
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
   </div>`;
 
   // ── Patient results table
@@ -409,6 +427,28 @@ function doSort(col){
   renderTable();
 }
 
+function renderGroupedCriteria(r) {
+  const allC = r.inclusion.map(c=>({...c,type:'INC'})).concat(r.exclusion.map(c=>({...c,type:'EXC'})));
+  const grouped = {};
+  allC.forEach(c => { const k = c.skill.key; if (!grouped[k]) grouped[k] = {skill:c.skill, items:[]}; grouped[k].items.push(c); });
+  const skillBg = {S0:'#fff3cd',S1:'#d1e7dd',S2:'#cff4fc',S3:'#e2d9f3'};
+  return ['S0','S1','S2','S3'].filter(k=>grouped[k]).map(k => {
+    const g = grouped[k];
+    const rows = g.items.map(c => {
+      const typeColor = c.type==='INC' ? '#059669' : '#dc2626';
+      const resColor = c.pass===true ? '#059669' : c.pass===false ? '#dc2626' : '#d97706';
+      const resText = c.pass===true ? 'PASS' : c.pass===false ? 'FAIL' : c.evaluated ? 'N/A' : '?';
+      const truncText = esc(c.text).slice(0,150) + (c.text.length>150 ? '...' : '');
+      return '<tr><td style="color:'+typeColor+';font-weight:700">'+c.type+'</td><td style="max-width:350px">'+truncText+'</td><td style="font-weight:700;color:'+resColor+'">'+resText+'</td><td style="font-size:0.7rem;color:#6b7280">'+c.evidence+'</td></tr>';
+    }).join('');
+    return '<div style="margin-bottom:10px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">'
+      + '<div style="background:'+skillBg[k]+';padding:6px 12px;font-size:0.75rem;font-weight:700">'
+      + '<span class="crit-skill '+g.skill.cls+'">'+g.skill.key+'</span> '+g.skill.label+' ('+g.items.length+' criteria)</div>'
+      + '<table class="crit-result-table"><thead><tr><th>Type</th><th>Criterion</th><th>Result</th><th>Evidence</th></tr></thead>'
+      + '<tbody>'+rows+'</tbody></table></div>';
+  }).join('');
+}
+
 function toggleExpand(idx){
   const row=document.getElementById('expand_'+idx);
   if(!row)return;
@@ -441,26 +481,8 @@ function toggleExpand(idx){
         </div>
       </div>
 
-      <h4 style="margin-top:12px">Criteria-by-Criteria Results</h4>
-      <table class="crit-result-table">
-        <thead><tr><th>Skill</th><th>Type</th><th>Criterion</th><th>Result</th><th>Evidence</th></tr></thead>
-        <tbody>
-          ${r.inclusion.map(c=>`<tr>
-            <td><span class="crit-skill ${c.skill.cls}">${c.skill.key}</span></td>
-            <td style="color:#059669;font-weight:700">INC</td>
-            <td style="max-width:350px">${esc(c.text).slice(0,150)}${c.text.length>150?'...':''}</td>
-            <td style="font-weight:700;color:${c.pass===true?'#059669':c.pass===false?'#dc2626':'#d97706'}">${c.pass===true?'PASS':c.pass===false?'FAIL':c.evaluated?'N/A':'?'}</td>
-            <td style="font-size:0.7rem;color:#6b7280">${c.evidence}</td>
-          </tr>`).join('')}
-          ${r.exclusion.map(c=>`<tr>
-            <td><span class="crit-skill ${c.skill.cls}">${c.skill.key}</span></td>
-            <td style="color:#dc2626;font-weight:700">EXC</td>
-            <td style="max-width:350px">${esc(c.text).slice(0,150)}${c.text.length>150?'...':''}</td>
-            <td style="font-weight:700;color:${c.pass===true?'#059669':c.pass===false?'#dc2626':'#d97706'}">${c.pass===true?'PASS':c.pass===false?'FAIL':c.evaluated?'N/A':'?'}</td>
-            <td style="font-size:0.7rem;color:#6b7280">${c.evidence}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      <h4 style="margin-top:12px">Criteria-by-Criteria Results — Grouped by Skill Level</h4>
+      ${renderGroupedCriteria(r)}
     </div>`;
     row.querySelector('td').innerHTML=detail;
     row.style.display='';
