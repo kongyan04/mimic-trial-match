@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Matching Rules — MIMIC-IV × Trial Eligibility</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#1a202c;min-height:100vh}
+
+header{background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:22px 28px;color:#fff}
+header h1{font-size:1.4rem;font-weight:800}
+header p{color:#bfdbfe;font-size:0.82rem;margin-top:5px}
+header a{color:#bfdbfe;text-decoration:underline}
+
+.page{max-width:960px;margin:0 auto;padding:24px 16px}
+
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.card h2{font-size:1.1rem;font-weight:800;color:#1e3a5f;margin-bottom:12px;display:flex;align-items:center;gap:8px;border-bottom:2px solid #e2e8f0;padding-bottom:10px}
+.card h3{font-size:0.92rem;font-weight:700;color:#374151;margin:14px 0 8px}
+.card p,.card li{font-size:0.84rem;color:#4b5563;line-height:1.7}
+.card ul{padding-left:20px;margin-bottom:10px}
+.card li{margin-bottom:4px}
+.card code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:0.78rem;color:#1e40af}
+
+.formula{background:#f0f9ff;border:1px solid #bfdbfe;border-radius:10px;padding:16px 20px;margin:12px 0;font-family:"Courier New",monospace;font-size:0.88rem;color:#1e3a5f;font-weight:700;text-align:center}
+.formula small{display:block;font-weight:400;font-size:0.75rem;color:#6b7280;margin-top:6px;font-family:"Segoe UI",sans-serif}
+
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:0.8rem}
+th{background:#f8fafc;text-align:left;padding:8px 10px;font-weight:700;color:#374151;border-bottom:2px solid #e2e8f0;font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em}
+td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+tr:hover td{background:#f8fafc}
+
+.skill-tag{font-size:0.72rem;font-weight:700;padding:3px 8px;border-radius:5px;display:inline-block}
+.sk0{background:#fff3cd;color:#856404}.sk1{background:#d1e7dd;color:#0f5132}
+.sk2{background:#cff4fc;color:#055160}.sk3{background:#e2d9f3;color:#432874}
+
+.eval-tag{font-size:0.72rem;font-weight:700;padding:2px 7px;border-radius:4px;display:inline-block}
+.ev-pass{background:#d1fae5;color:#065f46}.ev-fail{background:#fee2e2;color:#991b1b}
+.ev-unk{background:#fef3c7;color:#92400e}
+
+.example{background:#f9fafb;border-left:4px solid #2563eb;padding:10px 14px;margin:8px 0;border-radius:0 8px 8px 0;font-size:0.8rem}
+.example b{color:#1e3a5f}
+.example .arrow{color:#2563eb;font-weight:700}
+
+.warn{background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:14px 18px;margin:12px 0;font-size:0.82rem;color:#92400e}
+.warn b{color:#78350f}
+
+.source-note{text-align:center;padding:20px;font-size:0.72rem;color:#9ca3af}
+.source-note a{color:#2563eb}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Matching Rules Documentation</h1>
+  <p>How MIMIC-IV demo patients are evaluated against clinical trial eligibility criteria ·
+    <a href="index.html">Multi-Trial View</a> · <a href="trial-focus.html">Single Trial Screening</a></p>
+</header>
+
+<div class="page">
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>1. Overview</h2>
+  <p>Each clinical trial has eligibility criteria written as free text (e.g., "Age ≥ 50 years", "No history of heart failure"). Our system evaluates each criterion against each patient's structured EHR data from the MIMIC-IV demo dataset using a two-step process:</p>
+  <ol style="padding-left:20px;margin:10px 0">
+    <li style="font-size:0.84rem;color:#4b5563;line-height:1.7;margin-bottom:4px"><b>Classify</b> the criterion by EHR skill level (S0–S3)</li>
+    <li style="font-size:0.84rem;color:#4b5563;line-height:1.7;margin-bottom:4px"><b>Evaluate</b> using regex-based extraction + patient data lookup</li>
+  </ol>
+  <p>The rules are <b>heuristic pattern matching</b>, not validated clinical screening logic. They demonstrate how structured EHR data can be used for automated pre-screening, with known limitations.</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>2. S0–S3 Skill Classification</h2>
+  <p>Every criterion is classified into one of four skill levels, based on what data source would be needed to evaluate it. Classification uses regex pattern matching on the criterion text.</p>
+
+  <table>
+    <thead><tr><th>Skill</th><th>Name</th><th>Description</th><th>Can We Evaluate?</th><th>Example Patterns Matched</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="skill-tag sk0">S0</span></td>
+        <td>Undeterminable</td>
+        <td>Cannot be assessed from EHR — requires prospective data, consent, or clinical judgment</td>
+        <td><span class="eval-tag ev-unk">No</span></td>
+        <td><code>informed consent</code>, <code>willing to comply</code>, <code>life expectancy</code>, <code>investigator's judgment</code>, <code>planning to</code></td>
+      </tr>
+      <tr>
+        <td><span class="skill-tag sk1">S1</span></td>
+        <td>Structured Data</td>
+        <td>Directly evaluable via SQL on EHR structured tables (labs, vitals, demographics, prescriptions)</td>
+        <td><span class="eval-tag ev-pass">Yes</span></td>
+        <td><code>age ≥ 18</code>, <code>creatinine ≤ 2.0</code>, <code>hemoglobin</code>, <code>currently taking aspirin</code>, <code>female patients</code></td>
+      </tr>
+      <tr>
+        <td><span class="skill-tag sk2">S2</span></td>
+        <td>Clinical Notes</td>
+        <td>Requires NLP/LLM search in unstructured clinical notes (history, subjective status)</td>
+        <td><span class="eval-tag ev-unk">No*</span></td>
+        <td><code>history of smoking</code>, <code>functional status</code>, <code>NYHA class</code>, <code>cognitive impairment</code>, <code>prior surgery</code></td>
+      </tr>
+      <tr>
+        <td><span class="skill-tag sk3">S3</span></td>
+        <td>Hybrid</td>
+        <td>Try structured EHR data first (ICD codes); fall back to clinical notes if unknown</td>
+        <td><span class="eval-tag ev-pass">Partial</span></td>
+        <td><code>heart failure</code>, <code>CABG</code>, <code>diabetes mellitus</code>, <code>atrial fibrillation</code>, <code>chronic kidney disease</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top:8px;font-size:0.78rem;color:#6b7280">* S2 criteria cannot be evaluated because the MIMIC-IV <b>demo</b> dataset does not include clinical notes. The full MIMIC-IV-Note module would be needed.</p>
+
+  <h3>Classification Priority</h3>
+  <p>When a criterion matches multiple skill patterns, the first match wins in this order:</p>
+  <div class="formula">S0 → S1 → S3 → S2 (default)<small>S0 is checked first because consent/admin criteria override other keywords. S2 is the fallback if nothing else matches.</small></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>3. Evaluator Rules</h2>
+  <p>For criteria classified as evaluable (mainly S1 and S3), the system tries five evaluators in order. The <b>first match wins</b> — once an evaluator returns a result, the others are skipped.</p>
+
+  <div class="formula">evalAge → evalSex → evalLab → evalMedication → evalDiagnosis<small>If none match, the criterion is marked as "Cannot evaluate from structured EHR data"</small></div>
+
+  <!-- ── Age ── -->
+  <h3>3a. Age Evaluator</h3>
+  <p>Extracts age constraints from text using 7 regex patterns, then compares against the patient's <code>anchor_age</code> from MIMIC-IV <code>patients.csv</code>.</p>
+  <table>
+    <thead><tr><th>Pattern Type</th><th>Example Text</th><th>What It Extracts</th></tr></thead>
+    <tbody>
+      <tr><td>Minimum</td><td>"≥18 years", "at least 50 years", "older than 21"</td><td>age &gt;= value</td></tr>
+      <tr><td>Maximum</td><td>"≤75 years", "younger than 80", "up to 65"</td><td>age &lt;= value</td></tr>
+      <tr><td>Range</td><td>"age 18-75 years", "aged 50 to 80"</td><td>value1 &lt;= age &lt;= value2</td></tr>
+    </tbody>
+  </table>
+  <div class="example">
+    <b>Criterion:</b> "Age ≥ 50 years" <span class="arrow">→</span> extracts min=50 <span class="arrow">→</span> patient age 72 <span class="arrow">→</span> <span class="eval-tag ev-pass">PASS</span> "Age 72 >= 50"
+  </div>
+
+  <!-- ── Sex ── -->
+  <h3>3b. Sex Evaluator</h3>
+  <p>Matches gender-restricted criteria, compares against patient <code>gender</code> field (M/F).</p>
+  <table>
+    <thead><tr><th>Pattern</th><th>Checks For</th></tr></thead>
+    <tbody>
+      <tr><td><code>male only</code>, <code>male patients</code>, <code>sex: male</code></td><td>patient.gender === 'M'</td></tr>
+      <tr><td><code>female only</code>, <code>women patients</code>, <code>sex: female</code></td><td>patient.gender === 'F'</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ── Labs ── -->
+  <h3>3c. Lab Value Evaluator</h3>
+  <p>28 regex patterns match lab thresholds in criteria text. Each pattern specifies a lab name, comparison operator, and extracts the numeric threshold. The patient's <b>most recent</b> value for that lab from MIMIC-IV <code>labevents.csv</code> is compared.</p>
+  <table>
+    <thead><tr><th>Lab</th><th>MIMIC Item IDs</th><th>Example Pattern</th></tr></thead>
+    <tbody>
+      <tr><td>Hemoglobin</td><td>51222</td><td><code>hemoglobin ≥ 10 g/dL</code></td></tr>
+      <tr><td>Creatinine</td><td>50912</td><td><code>serum creatinine ≤ 2.0 mg/dL</code></td></tr>
+      <tr><td>Platelet Count</td><td>51265</td><td><code>platelet count ≥ 100,000</code></td></tr>
+      <tr><td>INR</td><td>51237</td><td><code>INR ≤ 1.5</code></td></tr>
+      <tr><td>Bilirubin</td><td>50885</td><td><code>total bilirubin ≤ 2.0</code></td></tr>
+      <tr><td>ALT / AST</td><td>50861 / 50878</td><td><code>ALT ≤ 3x ULN</code></td></tr>
+      <tr><td>WBC Count</td><td>51300</td><td><code>WBC ≥ 3.0</code></td></tr>
+      <tr><td>Potassium</td><td>50971</td><td><code>potassium ≥ 3.5</code></td></tr>
+      <tr><td>Sodium</td><td>50983</td><td><code>sodium ≤ 145</code></td></tr>
+      <tr><td>HbA1c</td><td>50852</td><td><code>HbA1c ≤ 10%</code></td></tr>
+      <tr><td>Cholesterol (Total, LDL)</td><td>50907, 50905</td><td><code>LDL ≥ 130</code></td></tr>
+      <tr><td>Troponin I/T</td><td>51002, 51003</td><td><code>troponin T ≥ 0.04</code></td></tr>
+      <tr><td>Hematocrit</td><td>51221</td><td><code>hematocrit ≥ 30%</code></td></tr>
+    </tbody>
+  </table>
+  <div class="example">
+    <b>Criterion:</b> "Baseline serum creatinine >2.0 mg/dL" <span class="arrow">→</span> extracts lab=Creatinine, op=>, threshold=2.0 <span class="arrow">→</span> patient creatinine=1.3 <span class="arrow">→</span> <span class="eval-tag ev-fail">FAIL</span> "Creatinine: 1.3 mg/dL fails > 2.0"
+  </div>
+  <p style="font-size:0.78rem;color:#6b7280;margin-top:6px">If the patient has no data for the requested lab, the result is <span class="eval-tag ev-unk">N/A</span> "No [lab] data available".</p>
+
+  <!-- ── Medications ── -->
+  <h3>3d. Medication Evaluator</h3>
+  <p>Checks if patients are taking (or not taking) specific drugs. Uses two approaches:</p>
+
+  <p><b>Individual drugs</b> — 32 drug names searched in criterion text and patient's <code>prescriptions.csv</code>:</p>
+  <p style="font-size:0.78rem;color:#4b5563;margin:6px 0">aspirin, warfarin, clopidogrel, heparin, enoxaparin, insulin, metformin, atorvastatin, rosuvastatin, simvastatin, lisinopril, enalapril, ramipril, losartan, valsartan, metoprolol, carvedilol, atenolol, bisoprolol, amlodipine, amiodarone, digoxin, furosemide, spironolactone, hydrochlorothiazide, rivaroxaban, apixaban, dabigatran, ticagrelor, prasugrel, nitroglycerin</p>
+
+  <p><b>Drug classes</b> — 6 class patterns mapped to specific drugs:</p>
+  <table>
+    <thead><tr><th>Class Pattern</th><th>Mapped Drugs</th></tr></thead>
+    <tbody>
+      <tr><td><code>beta-blocker</code></td><td>metoprolol, carvedilol, atenolol, bisoprolol, propranolol, labetalol</td></tr>
+      <tr><td><code>ACE inhibitor</code></td><td>lisinopril, enalapril, ramipril, captopril, benazepril</td></tr>
+      <tr><td><code>ARB</code></td><td>losartan, valsartan, irbesartan, olmesartan, candesartan</td></tr>
+      <tr><td><code>anticoagulant</code></td><td>warfarin, heparin, enoxaparin, rivaroxaban, apixaban, dabigatran</td></tr>
+      <tr><td><code>antiplatelet</code></td><td>aspirin, clopidogrel, ticagrelor, prasugrel</td></tr>
+      <tr><td><code>statin</code></td><td>atorvastatin, rosuvastatin, simvastatin, pravastatin, lovastatin</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Negation detection:</b> If the criterion text contains words like "not", "no", "without", "never", "exclude", "prohibited", the logic is inverted — having the drug means FAIL.</p>
+
+  <div class="example">
+    <b>Criterion (inclusion):</b> "Currently on stable statin therapy" <span class="arrow">→</span> checks for statin class <span class="arrow">→</span> patient has atorvastatin <span class="arrow">→</span> <span class="eval-tag ev-pass">PASS</span><br>
+    <b>Criterion (exclusion):</b> "No anticoagulant use" <span class="arrow">→</span> checks for anticoagulant class <span class="arrow">→</span> patient has warfarin <span class="arrow">→</span> <span class="eval-tag ev-fail">FAIL</span>
+  </div>
+
+  <!-- ── Diagnoses ── -->
+  <h3>3e. Diagnosis / Procedure Evaluator</h3>
+  <p>17 condition groups, each with keyword lists. The system checks if the criterion text mentions a condition, then looks for matching terms in the patient's ICD diagnoses (<code>diagnoses_icd.csv</code> + <code>d_icd_diagnoses.csv</code>) and procedures (<code>procedures_icd.csv</code> + <code>d_icd_procedures.csv</code>).</p>
+
+  <table>
+    <thead><tr><th>Condition Group</th><th>Keywords Matched</th></tr></thead>
+    <tbody>
+      <tr><td>Myocardial Infarction</td><td>myocardial infarction, acute mi, stemi, nstemi, heart attack</td></tr>
+      <tr><td>Heart Failure</td><td>heart failure, cardiomyopathy, congestive heart, chf</td></tr>
+      <tr><td>Atrial Fibrillation</td><td>atrial fibrillation, atrial flutter, afib</td></tr>
+      <tr><td>Coronary Artery Disease</td><td>coronary artery disease, cad, coronary atherosclerosis, ischemic heart</td></tr>
+      <tr><td>Hypertension</td><td>hypertension, hypertensive, essential hypertension</td></tr>
+      <tr><td>Diabetes</td><td>diabetes mellitus, diabetic, type 1/2 diabetes</td></tr>
+      <tr><td>Stroke</td><td>stroke, cerebrovascular accident, cva, cerebral infarction, transient ischemic</td></tr>
+      <tr><td>Chronic Kidney Disease</td><td>chronic kidney, renal failure, renal insufficiency, ckd, end stage renal</td></tr>
+      <tr><td>Liver Disease</td><td>hepatic, cirrhosis, liver disease, liver failure, hepatitis</td></tr>
+      <tr><td>COPD</td><td>copd, chronic obstructive, emphysema</td></tr>
+      <tr><td>Cancer</td><td>cancer, malignant, neoplasm, tumor, carcinoma, lymphoma, leukemia</td></tr>
+      <tr><td>Valve Disease</td><td>valve, valvular, mitral, aortic stenosis, tricuspid</td></tr>
+      <tr><td>Peripheral Artery Disease</td><td>peripheral artery, peripheral vascular, pad, pvd</td></tr>
+      <tr><td>Anemia</td><td>anemia, anaemia</td></tr>
+      <tr><td>PCI</td><td>angioplasty, percutaneous coronary, pci, stent</td></tr>
+      <tr><td>CABG</td><td>coronary artery bypass, cabg, bypass graft</td></tr>
+      <tr><td>Pacemaker / ICD</td><td>pacemaker, cardiac resynchronization, crt, implantable cardioverter, icd</td></tr>
+    </tbody>
+  </table>
+
+  <p><b>Negation detection:</b> Same as medications — "no history of", "without", "absence of", "free of" inverts the result.</p>
+
+  <div class="example">
+    <b>Criterion (inclusion):</b> "History of myocardial infarction" <span class="arrow">→</span> patient has ICD "Non-ST elevation (NSTEMI) myocardial infarction" <span class="arrow">→</span> <span class="eval-tag ev-pass">PASS</span><br>
+    <b>Criterion (exclusion):</b> "No history of stroke or TIA" <span class="arrow">→</span> patient has no stroke-related ICD codes <span class="arrow">→</span> <span class="eval-tag ev-pass">PASS</span> (exclusion not triggered)
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>4. Inclusion vs. Exclusion Logic</h2>
+  <p>Criteria are split into <b>inclusion</b> (patient must meet) and <b>exclusion</b> (patient must NOT meet).</p>
+
+  <table>
+    <thead><tr><th>Criterion Type</th><th>Patient Matches Criterion</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Inclusion</td><td>Yes</td><td><span class="eval-tag ev-pass">PASS</span></td></tr>
+      <tr><td>Inclusion</td><td>No</td><td><span class="eval-tag ev-fail">FAIL</span></td></tr>
+      <tr><td>Exclusion</td><td>Yes (patient has excluded condition)</td><td><span class="eval-tag ev-fail">FAIL</span></td></tr>
+      <tr><td>Exclusion</td><td>No (patient doesn't have it)</td><td><span class="eval-tag ev-pass">PASS</span></td></tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top:8px;font-size:0.82rem">For exclusion criteria, the pass/fail is <b>inverted</b>: if the evaluator finds the patient matches an exclusion condition, the final result is FAIL (patient is excluded from the trial).</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>5. Score & Eligibility Calculation</h2>
+
+  <h3>Match Score</h3>
+  <div class="formula">
+    Score = (Passed Criteria / Evaluated Criteria) × 100%
+    <small>"Evaluated" = criteria where we got a definitive PASS or FAIL. Unknown/unevaluable criteria are excluded from both numerator and denominator.</small>
+  </div>
+
+  <h3>Eligibility Determination</h3>
+  <div class="formula">
+    Eligible = (Failed === 0) AND (Passed > 0)
+    <small>A patient is "potentially eligible" only if they failed zero evaluated criteria AND passed at least one.</small>
+  </div>
+
+  <div class="example">
+    <b>Trial has 23 criteria:</b> 5 evaluable (all pass), 18 unevaluable<br>
+    <span class="arrow">→</span> Score = 5/5 = <b>100%</b><br>
+    <span class="arrow">→</span> Failed = 0, Passed = 5 <span class="arrow">→</span> <span class="eval-tag ev-pass">POTENTIALLY ELIGIBLE</span>
+  </div>
+
+  <div class="warn">
+    <b>Important caveat:</b> This approach is <b>optimistic</b>. A 100% score with only 5 of 23 criteria evaluated does not mean the patient truly qualifies — it means they passed everything we could check. The 18 unknown criteria (consent, clinical notes, etc.) could contain disqualifying conditions we cannot assess from structured data alone.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>6. Data Sources</h2>
+  <table>
+    <thead><tr><th>Data</th><th>MIMIC-IV Table</th><th>Key Columns Used</th></tr></thead>
+    <tbody>
+      <tr><td>Demographics</td><td><code>patients.csv</code></td><td>subject_id, gender, anchor_age</td></tr>
+      <tr><td>Admissions</td><td><code>admissions.csv</code></td><td>race, insurance, marital_status</td></tr>
+      <tr><td>Diagnoses</td><td><code>diagnoses_icd.csv</code> + <code>d_icd_diagnoses.csv</code></td><td>icd_code → long_title</td></tr>
+      <tr><td>Lab Results</td><td><code>labevents.csv</code> + <code>d_labitems.csv</code></td><td>itemid, valuenum, valueuom (latest per patient per lab)</td></tr>
+      <tr><td>Medications</td><td><code>prescriptions.csv</code></td><td>drug (unique drug names per patient)</td></tr>
+      <tr><td>Procedures</td><td><code>procedures_icd.csv</code> + <code>d_icd_procedures.csv</code></td><td>icd_code → long_title</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:8px;font-size:0.82rem">Trial data is fetched live from the <a href="https://clinicaltrials.gov/data-api/about-api/study-data-structure" target="_blank" style="color:#2563eb">ClinicalTrials.gov API v2</a> — completed cardiology trials with results, 10 per page.</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>7. Known Limitations</h2>
+  <ul>
+    <li><b>Heuristic, not clinical:</b> Rules are regex-based pattern matching, not validated clinical decision logic. They can miss unusual phrasing or complex criteria.</li>
+    <li><b>No clinical notes:</b> MIMIC-IV demo excludes free-text notes, so S2 criteria (history, smoking, functional status) cannot be evaluated.</li>
+    <li><b>Simple negation:</b> Negation detection uses keyword matching ("not", "no", "without"). Complex sentences like "patients with diabetes who do NOT have renal failure" may be misclassified.</li>
+    <li><b>Single lab value:</b> Only the most recent lab value per patient is used. Criteria requiring trends, baselines, or values at specific timepoints cannot be assessed.</li>
+    <li><b>Incomplete drug lists:</b> Drug name and class mappings cover common cardiovascular medications but are not exhaustive.</li>
+    <li><b>No vital signs:</b> Blood pressure, heart rate, and other vitals from ICU chartevents are not currently included in the preprocessed patient data.</li>
+    <li><b>No compound criteria:</b> Criteria with multiple conditions joined by "and"/"or" are evaluated as a single unit — only the first matching sub-condition is checked.</li>
+    <li><b>Optimistic eligibility:</b> Patients can be marked "eligible" even when most criteria are unevaluable, as unknowns are excluded from the score denominator.</li>
+  </ul>
+</div>
+
+</div>
+
+<div class="source-note">
+  Patient data: <a href="https://physionet.org/content/mimic-iv-demo/2.2/">MIMIC-IV Clinical Database Demo v2.2</a> ·
+  Trial data: <a href="https://clinicaltrials.gov">ClinicalTrials.gov</a> ·
+  <a href="index.html">Back to Multi-Trial View</a> · <a href="trial-focus.html">Single Trial Screening</a>
+</div>
+
+</body>
+</html>
